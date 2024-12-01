@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <!-- static -->
+  <canvas id="background"></canvas>
+  <canvas id="map"></canvas>
+  <canvas id="static"></canvas>
+  <!-- active -->
+  <canvas id="player"></canvas>
+  <canvas id="weapon"></canvas>
+  <canvas id="damage"></canvas>
+
+  <div id="ui-layer">
+    <div class="item">
+      开火角度：
+      <span id="firingAngle"></span>
+    </div>
+    <div class="item">
+      力度：
+      <span id="firingPower"></span>
+    </div>
+    <div class="item">
+      技能：
+      <span id="skills"></span>
+      <div>
+        <button id="plusOne">+1</button>
+        <button id="trident">III</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./index.js"></script>
+</body>
+</html>

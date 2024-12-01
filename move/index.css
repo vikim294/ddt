@@ -1,0 +1,21 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+canvas {
+    position: absolute;
+    /* border: 1px solid #000; */
+}
+
+#map {
+    z-index: 1;
+    /* display: none */
+}
+
+#player {
+    z-index: 2;
+    /* display: none */
+}
+

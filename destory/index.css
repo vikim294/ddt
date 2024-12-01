@@ -1,0 +1,31 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+canvas {
+
+}
+
+#map {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+    /* display: none */
+}
+
+#player {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+}
+
+
+#ui-layer {
+    position: absolute;
+    right: 0;
+    top: 0;
+}

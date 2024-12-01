@@ -1,0 +1,16 @@
+* {
+    padding: 0;
+    margin: 0;
+}
+
+canvas {
+    position: absolute;
+}
+
+#scene {
+    z-index: 1;
+}
+
+#charater {
+    z-index: 2;
+}

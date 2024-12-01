@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+
+    <canvas></canvas>
+    <script src="./damageCanvas.js"></script>
+    <script>
+        const canvas = document.querySelector('canvas')
+        canvas.width = 1000
+        canvas.height = 500
+
+        const damageCanvas = new DamageCanvas(canvas, 40)
+
+            damageCanvas.addDamage({
+                bombId: 1,
+                x: 100,
+                y: 100,
+                damageValue: 200,
+            })
+
+            damageCanvas.addDamage({
+                bombId: 1,
+                x: 200,
+                y: 100,
+                damageValue: 250,
+            })
+
+            damageCanvas.draw(1)
+
+            setTimeout(()=>{
+                damageCanvas.addDamage({
+                    bombId: 2,
+                    x: 200,
+                    y: 200,
+                    damageValue: 300,
+                })
+
+                damageCanvas.addDamage({
+                    bombId: 2,
+                    x: 300,
+                    y: 200,
+                    damageValue: 350,
+                })
+
+                damageCanvas.draw(2)
+            }, 1000)
+
+            setTimeout(()=>{
+                damageCanvas.addDamage({
+                    bombId: 3,
+                    x: 400,
+                    y: 300,
+                    damageValue: 300,
+                })
+
+                damageCanvas.draw(3)
+            }, 2000)
+            
+        
+    </script>
+</body>
+</html>
