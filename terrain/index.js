@@ -939,46 +939,27 @@ function adjustFiringPower() {
 }
 
 function playerStartToFire() {
-    // 假定发射角度为 60度、力度为100
-    const firingAngle = players[activePlayerIndex].angle + players[activePlayerIndex].weaponAngle
-    const angle = players[activePlayerIndex].direction === 'right' ? firingAngle : 180 - firingAngle
-    const power = players[activePlayerIndex].firingPower
-    // 角度会投影到x和y轴、力度决定初速度
-    // 位移 = v0 * t + 1/2 * a * t * t
-    // 水平方向只有初速度，无加速度，x = v0Horizontal * t
-    // 垂直方向有初速度，和重力加速度g, y = v0Vertical * t + 1/2 * g * t * t
+    const { data: canvasData } = bombDrawingOffscreenCanvasCtx.getImageData(0, 0, bombDrawingOffscreenCanvasEl.width, bombDrawingOffscreenCanvasEl.height)
 
-    // 力度 和 初速度 的关系：100力度 = 1000px/s => 1力度 = 10px/s
-
-    // 水平方向
-    const v0 = power * 10
-    // console.log('v0', v0)
-    let v0Horizontal = v0 * Math.cos(angleToRadian(angle))
-    // console.log('v0Horizontal', v0Horizontal)
-
-    // 垂直方向
-    let v0Vertical = v0 * Math.sin(angleToRadian(angle))
-
-    players[activePlayerIndex].bomb = {
-        // bomb从 player中心上方 PLAYER_BOUNDING_BOX_LENGTH 处发射
-        x: players[activePlayerIndex].x,
-        y: players[activePlayerIndex].y - PLAYER_BOUNDING_BOX_LENGTH,
-
-        v0Horizontal,
-        v0Vertical,
-
-        damageRadius: 50,
-    }
-
+    // console.time('preCalculateBombData')
+    // preCalculateBombData 耗时好像也不是很长，所以暂时不需要用web worker吧
+    preCalculateBombData(canvasData)
+    // console.timeEnd('preCalculateBombData')
     playerFires()
+    
+    // 发射后，隔1s后再发射
+    players[activePlayerIndex].numberOfFires--
+    if(players[activePlayerIndex].numberOfFires > 0) {
+        const timerId = setTimeout(()=>{
+            clearTimeout(timerId)
+            playerStartToFire()
+        }, 1000)
+    }
 }
 
 function playerFires() {
-    players[activePlayerIndex].numberOfFires--
-
-    preCalculateBombData()
-
-    players[activePlayerIndex].firingTime = +new Date()
+    if(isDrawingBomb) return
+    isDrawingBomb = true
     drawBomb()
 }
 
@@ -1048,12 +1029,44 @@ function drawTrack(ctx, track = []) {
     ctx.restore()
 }
 
-function preCalculateBombData() {
-    let sec = 0
-    let _bomb = {
-        ...players[activePlayerIndex].bomb
+function preCalculateBombData(canvasData) {
+    // 假定发射角度为 60度、力度为100
+    const firingAngle = players[activePlayerIndex].angle + players[activePlayerIndex].weaponAngle
+    const angle = players[activePlayerIndex].direction === 'right' ? firingAngle : 180 - firingAngle
+    const power = players[activePlayerIndex].firingPower
+    // 角度会投影到x和y轴、力度决定初速度
+    // 位移 = v0 * t + 1/2 * a * t * t
+    // 水平方向只有初速度，无加速度，x = v0Horizontal * t
+    // 垂直方向有初速度，和重力加速度g, y = v0Vertical * t + 1/2 * g * t * t
+
+    // 力度 和 初速度 的关系：100力度 = 1000px/s => 1力度 = 10px/s
+
+    // 水平方向
+    const v0 = power * 10
+    // console.log('v0', v0)
+    let v0Horizontal = v0 * Math.cos(angleToRadian(angle))
+    // console.log('v0Horizontal', v0Horizontal)
+
+    // 垂直方向
+    let v0Vertical = v0 * Math.sin(angleToRadian(angle))
+
+    const bomb = {
+        id: +new Date(),
+        x: players[activePlayerIndex].x,
+        y: players[activePlayerIndex].y - PLAYER_BOUNDING_BOX_LENGTH,
+        v0Horizontal,
+        v0Vertical,
+        damageRadius: 50,
     }
 
+    players[activePlayerIndex].bombsData.push(bomb)
+    
+    let sec = 0
+    let _bomb = {
+        ...bomb
+    }
+
+    // --- calculate Track
     const track = []
     while(!pointOutOfMap(_bomb)) {
         // console.log('preCalculate')
@@ -1077,9 +1090,10 @@ function preCalculateBombData() {
 
     // drawTrack(weaponCtx, track)
 
-    players[activePlayerIndex].bomb.track = track
+    // players[activePlayerIndex].bomb.track = track
+    bomb.track = track
 
-    // getTarget
+    // get real-time angle and target info
     for(let i = 0; i < track.length; i++) {
 
         // --- bomb角度计算
@@ -1103,38 +1117,54 @@ function preCalculateBombData() {
             track[i].bombAngle = bombAngle
         }
 
-        if(!players[activePlayerIndex].bomb.bombSec) {
+        if(!bomb.bombSec) {
             const {
                 x, y, sec
             } = track[i]
-            const { data } = mapCtx.getImageData(x, y, 1, 1)
-            const r = data[0]
-            const g = data[1]
-            const b = data[2]
-            // console.log('x, y', x, y, 'r, g, b', r, g, b)
+
+            // 如果track上的该点 在map范围外
+            if(x < 0 || y < 0 || x >= CANVAS_WIDTH || y >= CANVAS_HEIGHT) {
+                continue
+            }
+
+            // x y 像素的数据
+            const index = (y * CANVAS_WIDTH + x) * 4
+            const r = canvasData[index]
+            const g = canvasData[index + 1]
+            const b = canvasData[index + 2]
+            const a = canvasData[index + 3]
+            // console.log('x, y', x, y, 'r, g, b, a', r, g, b, a)
     
             if(!(r === 0 && g === 0 && b === 0)) {
-                players[activePlayerIndex].bomb.targetX = x
-                players[activePlayerIndex].bomb.targetY = y
-                players[activePlayerIndex].bomb.bombSec = sec
+                bomb.targetX = x
+                bomb.targetY = y
+                bomb.bombSec = sec
     
-                console.log(players[activePlayerIndex].bomb)
+                console.log(bomb)
+
+                // 在离屏canvas上 bomb 
+                bombTarget({
+                    x,
+                    y,
+                    damageRadius: bomb.damageRadius
+                }, bombDrawingOffscreenCanvasCtx)
+
             }
         }
     }
 
-    if(players[activePlayerIndex].bomb.bombSec) {
-        return
+    if(!bomb.bombSec) {
+        console.log('out of map boundary', bomb)
+        const {
+            x, y
+        } = track[track.length - 1]
+        bomb.targetX = x
+        bomb.targetY = y
+        bomb.bombSec = sec
+        bomb.isOutOfMapBoundary = true
     }
 
-    console.log('out of map boundary')
-    const {
-        x, y
-    } = track[track.length - 1]
-    players[activePlayerIndex].bomb.targetX = x
-    players[activePlayerIndex].bomb.targetY = y
-    players[activePlayerIndex].bomb.bombSec = sec
-    players[activePlayerIndex].bomb.isOutOfMapBoundary = true
+    bomb.firingTime = +new Date()
 }
 
 function preCalculateTridentData() {
@@ -1196,7 +1226,7 @@ function preCalculateTridentData() {
                 console.log(i, bomb)
                 isBombOutOfMapBoundary = false
 
-                // 
+                // 在离屏canvas上 bomb 
                 bombTarget({
                     x,
                     y,
@@ -1221,73 +1251,78 @@ function preCalculateTridentData() {
 }
 
 function drawBomb() {
-    const elapsedMs = +new Date() - players[activePlayerIndex].firingTime
+    if(players[activePlayerIndex].bombsData.length === 0 && players[activePlayerIndex].numberOfFires === 0) {
+        isDrawingBomb = false
 
-    if(elapsedMs >= players[activePlayerIndex].bomb.bombSec * 1000) {
-        weaponCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+        // 重置 players[activePlayerIndex].firingPower
+        players[activePlayerIndex].firingPower = 0
+        updatePlayerFiringPower()
 
-        if(!players[activePlayerIndex].bomb.isOutOfMapBoundary) {
-
-            const target = {
-                x: players[activePlayerIndex].bomb.x,
-                y: players[activePlayerIndex].bomb.y,
-                damageRadius: players[activePlayerIndex].bomb.damageRadius,
-                bombAngle: players[activePlayerIndex].bomb.track[elapsedMs].bombAngle
-            }
-            bombTarget(target, mapCtx)
-            // 对player的effect
-            checkBombEffect(target)
-            // 重置 players[activePlayerIndex].firingPower
-            players[activePlayerIndex].firingPower = 0
-            updatePlayerFiringPower()
-        }
-
-        if(players[activePlayerIndex].numberOfFires > 0) {
-            // 继续发射
-            setTimeout(() => {
-                playerFires()
-            }, 2000);
-        }
-        else {
-            // startNextTurn()
-        }
-
+        // nextTurn?
+        console.log('startNextTurn')
+        // startNextTurn()
         return
     }
 
     requestAnimationFrame(drawBomb)
 
-    // --- 
-    const {
-        x,
-        y,
-        bombAngle
-    } = players[activePlayerIndex].bomb.track[elapsedMs]
-
     weaponCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-    // 1.
-    // weaponCtx.beginPath()
-    // weaponCtx.arc(players[activePlayerIndex].bomb.x, players[activePlayerIndex].bomb.y, 1, 0, Math.PI * 2)
-    // weaponCtx.stroke()
-    // 2.bomb使用图片 且角度动态改变
-    weaponCtx.save()
 
-    weaponCtx.translate(players[activePlayerIndex].bomb.x, players[activePlayerIndex].bomb.y)
-    weaponCtx.rotate(angleToRadian(bombAngle))
-    weaponCtx.drawImage(bombImgEl, 0, 0, bombImgEl.width, bombImgEl.height, -bombImgEl.width / 2, -bombImgEl.height / 2, bombImgEl.width, bombImgEl.height)
+    for(let i = 0; i < players[activePlayerIndex].bombsData.length; i++) {
+        const bomb = players[activePlayerIndex].bombsData[i]
+        const elapsedMs = +new Date() - bomb.firingTime
 
-    weaponCtx.restore()
+        // 该bomb不应该再被渲染到画布上了
+        if(elapsedMs >= bomb.bombSec * 1000) {
+            // weaponCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+            players[activePlayerIndex].bombsData = players[activePlayerIndex].bombsData.filter(item => item !== bomb)
+    
+            if(!bomb.isOutOfMapBoundary) {
+                const target = {
+                    x: bomb.x,
+                    y: bomb.y,
+                    damageRadius: bomb.damageRadius,
+                    bombAngle: bomb.track[elapsedMs].bombAngle
+                }
+                bombTarget(target, mapCtx)
+                // 对player的effect
+                checkBombEffect(target)
+            }
 
-    // 计算在笛卡尔坐标系下的 x 和 y
-    // const x = players[activePlayerIndex].x + players[activePlayerIndex].bomb.v0Horizontal * elapsedSec
-    // bomb从 player中心上方 PLAYER_BOUNDING_BOX_LENGTH 处发射
-    // const y = toCanvasCoordinateY(toCartesianCoordinateY(players[activePlayerIndex].y - PLAYER_BOUNDING_BOX_LENGTH) + players[activePlayerIndex].bomb.v0Vertical * elapsedSec + 1 / 2 * G * elapsedSec * elapsedSec)
-    // 最终要绘制的bomb的坐标 需要用canvas的坐标系
-    // players[activePlayerIndex].bomb.x = Math.floor(x)
-    // players[activePlayerIndex].bomb.y = Math.floor(y)
+            continue
+        }
 
-    players[activePlayerIndex].bomb.x = x
-    players[activePlayerIndex].bomb.y = y
+        // --- render bomb
+        const {
+            x,
+            y,
+            // bombAngle
+        } = bomb.track[elapsedMs]
+
+        // 1.
+        weaponCtx.beginPath()
+        weaponCtx.arc(bomb.x, bomb.y, 1, 0, Math.PI * 2)
+        weaponCtx.stroke()
+        // 2.bomb使用图片 且角度动态改变
+        // weaponCtx.save()
+
+        // weaponCtx.translate(players[activePlayerIndex].bomb.x, players[activePlayerIndex].bomb.y)
+        // weaponCtx.rotate(angleToRadian(bombAngle))
+        // weaponCtx.drawImage(bombImgEl, 0, 0, bombImgEl.width, bombImgEl.height, -bombImgEl.width / 2, -bombImgEl.height / 2, bombImgEl.width, bombImgEl.height)
+
+        // weaponCtx.restore()
+
+        // 计算在笛卡尔坐标系下的 x 和 y
+        // const x = players[activePlayerIndex].x + players[activePlayerIndex].bomb.v0Horizontal * elapsedSec
+        // bomb从 player中心上方 PLAYER_BOUNDING_BOX_LENGTH 处发射
+        // const y = toCanvasCoordinateY(toCartesianCoordinateY(players[activePlayerIndex].y - PLAYER_BOUNDING_BOX_LENGTH) + players[activePlayerIndex].bomb.v0Vertical * elapsedSec + 1 / 2 * G * elapsedSec * elapsedSec)
+        // 最终要绘制的bomb的坐标 需要用canvas的坐标系
+        // players[activePlayerIndex].bomb.x = Math.floor(x)
+        // players[activePlayerIndex].bomb.y = Math.floor(y)
+
+        bomb.x = x
+        bomb.y = y
+    }
 }
 
 function drawTrident() {
@@ -1644,6 +1679,8 @@ function registerListeners() {
                 playerStartToFireTrident()
             }
             else {
+                // 复制 map到 offscreenMap
+                bombDrawingOffscreenCanvasCtx.drawImage(mapCanvasEl, 0, 0)
                 playerStartToFire()
             }
         }
@@ -1768,6 +1805,7 @@ function updatePlayerIndex() {
 }
 
 function startNextTurn() {
+   
     setTimeout(() => {
         updatePlayerIndex()
         alert(`轮到${players[activePlayerIndex].name}出手了`)
@@ -1777,6 +1815,7 @@ function startNextTurn() {
 
         players[activePlayerIndex].isOperationDone = false
         players[activePlayerIndex].numberOfFires = 1
+        players[activePlayerIndex].bombsData = []
         players[activePlayerIndex].isTrident = false
 
         calculateAndDrawPlayerByXY(players[activePlayerIndex])
@@ -1827,7 +1866,9 @@ let players = [
         bombs: [],
         weaponAngle: 0,
         firingPower: 0,
-        firingTime: null
+        firingTime: null,
+
+        bombsData: []
     },
     {
         x: 1546,
@@ -1862,6 +1903,14 @@ let players = [
 
 let activePlayerIndex = 0
 let inactivePlayerIndex = (activePlayerIndex + 1) % players.length
+
+let isDrawingBomb = false
+let bombDrawingOffscreenCanvasEl = document.createElement('canvas')
+bombDrawingOffscreenCanvasEl.width = mapCanvasEl.width
+bombDrawingOffscreenCanvasEl.height = mapCanvasEl.height
+const bombDrawingOffscreenCanvasCtx = bombDrawingOffscreenCanvasEl.getContext('2d', {
+    willReadFrequently: true
+})
 
 // 加载 background img
 // let backgroundImgEl = document.createElement('img')
